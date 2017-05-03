@@ -21,3 +21,12 @@
 
 static void __iomem *base_addr;
 base_addr = ioremap(KEY_ADCBASE, offset_all);
+
+-----------------------------------------------------------------------------------------------
+#下面的两行代码，理解其思路。
+#239     struct keyadc_dev *pdata = pdev->dev.platform_data; 
+#240     pdata->regs = (struct sun7i_lradc_regs *)LRADC_BASE_ADDR;
+#
+#分析是不是最好的办法。
+#
+#
