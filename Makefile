@@ -4,10 +4,12 @@ export CROSS_COMPILE=/home/jiangxiujie/a3333/lichee/out/sun8iw5p1/android/common
 EXTRA_CFLAGS += $(DEBFLAGS) -Wall
 
 obj-m += key_input.o
+obj-m += test/irq.o
 
 KDIR ?= ~/a3333/lichee/linux-3.4
 PWD := $(shell pwd)
 all:
 	make $(EXTRA_CFLAGS) -C $(KDIR) M=$(PWD) modules
 clean:
-	rm *.o *.ko *.mod.c *.symvers modules.order
+	rm -rf *.o *.ko *.mod.c *.symvers modules.order
+	#如何删除test目录下的垃圾文件

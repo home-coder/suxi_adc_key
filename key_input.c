@@ -25,16 +25,15 @@
 #define KEYADC_HOME     (0x13)  
 #define KEYADC_BACK     (0x14)  
 
-#define AW_IRQ_LRADC    62
-#define KEY_IRQNO       (AW_IRQ_LRADC)  
+#define KEY_IRQNO       (62) 
 
-#define INPUTNAME       "keyadc_input"    
-#define PLATFORMNAME    "platform_keyadc"  
-#define DEVNAME         "keyadc"  
-#define WORKQUEUENAME   "keyadc_workqueue"  
-#define IRQNAME         "keyadc_irq"  
+#define INPUTNAME       "keyadc_input"
+#define PLATFORMNAME    "platform_keyadc"
+#define DEVNAME         "keyadc"
+#define WORKQUEUENAME   "keyadc_workqueue"
+#define IRQNAME         "keyadc_irq"
 
-//#define DEBUGMASK   
+#define DEBUGMASK   
 #ifdef DEBUGMASK  
 #define dprintk(fmt, arg...) printk(fmt, ## arg)  
 #else  
@@ -52,18 +51,18 @@ static struct sun7i_lradc_regs {
 
 //regs   
 	/*LRADC_CTRL*/  
-	u32 ctrl;  
+	volatile void __iomem *ctrl;  
 	/*LRADC_INTC*/  
-	u32 intc;  
+	volatile void __iomem *intc;
 	/*LRADC_INTS*/  
-	u32 ints;  
+	volatile void __iomem *ints;  
 	/*LRADC_DATA0*/  
-	u32 data0;  
+	volatile void __iomem *data0;  
 	/*LRADC_DATA1*/  
-	u32 data1;  
+	volatile void __iomem *data1;  
 
 //bits  
-#define  FIRST_CONCERT_DLY  (2<<24)  
+#define  FIRST_CONCERT_DLY  (0<<24)  
 #define  CHAN           (0x3)  
 #define  ADC_CHAN_SELECT    (CHAN<<22)  
 #define  LRADC_KEY_MODE     (0)  
@@ -110,7 +109,7 @@ static struct keyadc_dev{
 };    
 
 static struct keyadc_dev keyadc_pdata = {  
-	.regs = NULL,  
+	.regs = (struct sun7i_lradc_regs *)LRADC_BASE_ADDR,  
 };  
 
 static struct platform_device keyadc_device = {  
@@ -221,11 +220,11 @@ static irqreturn_t key_interrupt(int irq, void *pvoid)
 	struct keyadc_dev *pdata    = (struct keyadc_dev *)pvoid;  
 	dprintk("=====[%s(%d)]\n", __FUNCTION__, __LINE__);  
 
-	reg_val  = readl(&pdata->regs->ints);  
+	reg_val  = readl(pdata->regs->ints);  
 
 	queue_work(pdata->keyadc_workqueue, &pdata->keyadc_work);  
 
-	writel(reg_val, &pdata->regs->ints);  
+	writel(reg_val, pdata->regs->ints);  
 
 	return IRQ_HANDLED;  
 }  
@@ -237,7 +236,6 @@ static int keyadc_probe(struct platform_device *pdev)
 	dprintk("=====[%s(%d)]\n", __FUNCTION__, __LINE__);  
 
 	struct keyadc_dev *pdata = pdev->dev.platform_data;  
-	pdata->regs = (struct sun7i_lradc_regs *)LRADC_BASE_ADDR;  
 
 	alloc_chrdev_region(&pdata->devid, 0, 1, DEVNAME);  
 	pchrdev = cdev_alloc();  
@@ -273,9 +271,17 @@ static int keyadc_probe(struct platform_device *pdev)
 		goto fail3;  
 	}  
 	device_create(pdata->class, NULL, pdata->devid, NULL, DEVNAME);  
+	
+	pdata->regs->intc = (volatile void __iomem *)(LRADC_BASE_ADDR + LRADC_INTC);
+	printk("intc =%p\n", pdata->regs->intc);
+	pdata->regs->ctrl = (volatile void __iomem *)(LRADC_BASE_ADDR + LRADC_CTRL);
+	printk("ctrl =%p\n", pdata->regs->ctrl);
+	pdata->regs->ints = (volatile void __iomem *)(LRADC_BASE_ADDR + LRADC_INTS);
+	pdata->regs->data0 = (volatile void __iomem *)(LRADC_BASE_ADDR + LRADC_DATA0);
+	
 
-	writel(LRADC_ADC0_DOWN_EN|LRADC_ADC0_UP_EN|LRADC_ADC0_DATA_EN, &pdata->regs->intc);  
-	writel(FIRST_CONCERT_DLY|LEVELB_VOL|KEY_MODE_SELECT|LRADC_HOLD_EN|ADC_CHAN_SELECT|LRADC_SAMPLE_125HZ|LRADC_EN, &pdata->regs->ctrl);  
+//	writel(LRADC_ADC0_DOWN_EN|LRADC_ADC0_UP_EN|LRADC_ADC0_DATA_EN, pdata->regs->intc);  
+//	writel(FIRST_CONCERT_DLY|LEVELB_VOL|KEY_MODE_SELECT|LRADC_HOLD_EN|ADC_CHAN_SELECT|LRADC_SAMPLE_250HZ|LRADC_EN, pdata->regs->ctrl);  
 
 	if (request_irq(KEY_IRQNO, key_interrupt, 0, IRQNAME, pdata)) {  
 		dprintk("=====[%s(%d)]:%s\n", __FUNCTION__, __LINE__, "fail to request_irq");  
@@ -337,6 +343,7 @@ static int __init keyadc_init(void)
 {  
 	int ret;  
 
+	printk("------------------------\n");
 	dprintk("=====[%s(%d)]\n", __FUNCTION__, __LINE__);  
 
 	ret = platform_device_register(&keyadc_device);  
@@ -362,10 +369,11 @@ static void __exit keyadc_exit(void)
 	platform_driver_unregister(&keyadc_driver);  
 }  
 
+module_init(keyadc_init);  
+module_exit(keyadc_exit);  
 //refer to this coder 成龙 based on A20
 //MODULE_AUTHOR("Jack Chen, chwenj@gmail.com");  
 MODULE_AUTHOR("home-coder, one_face@sina.com");
 MODULE_LICENSE("GPL");  
-
-module_init(keyadc_init);  
-module_exit(keyadc_exit);  
+MODULE_VERSION("1.0");
+MODULE_DESCRIPTION("adc key support");
