@@ -25,6 +25,7 @@
 #define KEYADC_HOME     (0x13)  
 #define KEYADC_BACK     (0x14)  
 
+#define AW_IRQ_LRADC    62
 #define KEY_IRQNO       (AW_IRQ_LRADC)  
 
 #define INPUTNAME       "keyadc_input"    
@@ -177,7 +178,7 @@ static long keyadc_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned 
 	if (KEYADC_GET == cmd){  
 		karg = pdata->keycode;  
 		dprintk("send keycode to usr space: pdata->keycode=0x%x, karg=0x%x\n", pdata->keycode, karg);  
-		ret = copy_to_user(arg, &karg, sizeof(unsigned long));  
+		ret = copy_to_user((void __user *)arg, &karg, sizeof(unsigned long));  
 		if(0 == ret){  
 			dprintk("copy_to_user successed!\n");  
 		}  
@@ -215,10 +216,10 @@ static void keyadc_do_work(struct work_struct *work)
 
 static irqreturn_t key_interrupt(int irq, void *pvoid)  
 {  
-	dprintk("=====[%s(%d)]\n", __FUNCTION__, __LINE__);  
 
 	unsigned int reg_val;  
 	struct keyadc_dev *pdata    = (struct keyadc_dev *)pvoid;  
+	dprintk("=====[%s(%d)]\n", __FUNCTION__, __LINE__);  
 
 	reg_val  = readl(&pdata->regs->ints);  
 
@@ -231,10 +232,9 @@ static irqreturn_t key_interrupt(int irq, void *pvoid)
 
 static int keyadc_probe(struct platform_device *pdev)  
 {  
-	dprintk("=====[%s(%d)]\n", __FUNCTION__, __LINE__);  
-
 	int ret;  
 	struct cdev *pchrdev;  
+	dprintk("=====[%s(%d)]\n", __FUNCTION__, __LINE__);  
 
 	struct keyadc_dev *pdata = pdev->dev.platform_data;  
 	pdata->regs = (struct sun7i_lradc_regs *)LRADC_BASE_ADDR;  
@@ -310,9 +310,8 @@ fail0:
 
 static int keyadc_remove(struct platform_device *pdev)  
 {  
-	dprintk("=====[%s(%d)]\n", __FUNCTION__, __LINE__);  
-
 	struct keyadc_dev *pdata = pdev->dev.platform_data;  
+	dprintk("=====[%s(%d)]\n", __FUNCTION__, __LINE__);  
 
 	destroy_workqueue(pdata->keyadc_workqueue);  
 	device_destroy(pdata->class, pdata->devid);         
@@ -365,7 +364,7 @@ static void __exit keyadc_exit(void)
 
 //refer to this coder 成龙 based on A20
 //MODULE_AUTHOR("Jack Chen, chwenj@gmail.com");  
-MODULE_AUTHOR("home-coder", one_face@sina.com);
+MODULE_AUTHOR("home-coder, one_face@sina.com");
 MODULE_LICENSE("GPL");  
 
 module_init(keyadc_init);  
