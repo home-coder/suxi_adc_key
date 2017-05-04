@@ -196,21 +196,23 @@ static struct file_operations keyadc_fops = {
 static void keyadc_do_work(struct work_struct *work)  
 {  
 	struct keyadc_dev *pdata;  
+	dprintk("=====[%s(%d)]\n", __FUNCTION__, __LINE__);
+	pdata = (struct keyadc_dev *)container_of(work, struct keyadc_dev, keyadc_work);
 
-	dprintk("=====[%s(%d)]\n", __FUNCTION__, __LINE__);  
+	//data[5:0]
+	u32	dval = *(volatile unsigned __iomem *)(pdata->regs->data0) & 0x3f;
+	printk("%d\n", dval);
+	if (dval < 9) {
+		pdata->keycode = KEY_VOLUMEUP;
+		printk("------------------up-----------------\n");
+	} else if (dval > 9 && dval < 20) {
+		pdata->keycode = KEY_VOLUMEDOWN;
+		printk("------------------down-----------------\n");
+	}
 
-	pdata = (struct keyadc_dev *)container_of(work, struct keyadc_dev, keyadc_work);          
-
-	if ((KEY_VOLUMEUP == pdata->keycode) ||  
-			(KEY_VOLUMEDOWN == pdata->keycode)   ||  
-			(KEY_HOME == pdata->keycode) ||  
-			(KEY_BACK == pdata->keycode)) {  
-		input_report_key(pdata->input, pdata->keycode, 1);  
-		input_report_key(pdata->input, pdata->keycode, 0);  
-		input_sync(pdata->input);  
-	} else {  
-		dprintk("=====[%s(%d)]:%s\n", __FUNCTION__, __LINE__, "No Keycode to Report!");  
-	}  
+	input_report_key(pdata->input, pdata->keycode, 1);
+	input_report_key(pdata->input, pdata->keycode, 0);
+	input_sync(pdata->input);
 }  
 
 static irqreturn_t key_interrupt(int irq, void *pvoid)  
