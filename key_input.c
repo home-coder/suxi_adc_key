@@ -41,27 +41,14 @@
 #endif  
 
 /****************************************************************/  
-static struct sun7i_lradc_regs {  
 #define LRADC_BASE_ADDR         (0xf1c22800)
-#define LRADC_CTRL				(0x00) 
-#define LRADC_INTC				(0x04) 
-#define LRADC_INTS				(0x08)
-#define LRADC_DATA0				(0x0c)
-#define LRADC_DATA1				(0x10)
+#define REG_ADDR(offset)		(volatile void __iomem *)(LRADC_BASE_ADDR + offset)
 
-//regs   
-	/*LRADC_CTRL*/  
-	volatile void __iomem *ctrl;  
-	/*LRADC_INTC*/  
-	volatile void __iomem *intc;
-	/*LRADC_INTS*/  
-	volatile void __iomem *ints;  
-	/*LRADC_DATA0*/  
-	volatile void __iomem *data0;  
-	/*LRADC_DATA1*/  
-	volatile void __iomem *data1;  
-
-//bits  
+#define LRADC_CTRL				REG_ADDR(0x00)
+#define LRADC_INTC				REG_ADDR(0x04)
+#define LRADC_INTS				REG_ADDR(0x08)
+#define LRADC_DATA0				REG_ADDR(0x0c)
+/*****************************************************************/
 #define  FIRST_CONCERT_DLY  (0<<24)  
 #define  CHAN           (0x3)  
 #define  ADC_CHAN_SELECT    (CHAN<<22)  
@@ -93,7 +80,20 @@ static struct sun7i_lradc_regs {
 #define  LRADC_ADC0_UPPEND  (1<<4)  
 #define  LRADC_ADC0_DOWNPEND    (1<<1)  
 #define  LRADC_ADC0_DATAPEND    (1<<0)  
-} __attribute__((packed));  
+
+struct sunxi_adc_reg_addr{
+	volatile void __iomem *ctrl;
+	volatile void __iomem *intc;
+	volatile void __iomem *ints;
+	volatile void __iomem *data0;
+};
+
+static struct sunxi_adc_reg_addr sunxi_adc_reg = {
+	LRADC_CTRL,
+	LRADC_INTC,
+	LRADC_INTS,
+	LRADC_DATA0,
+};
 
 static struct keyadc_dev{  
 	dev_t devid;  
@@ -105,11 +105,11 @@ static struct keyadc_dev{
 	struct work_struct keyadc_work;  
 
 	unsigned int keycode;  
-	volatile struct sun7i_lradc_regs *regs;  
+	struct sunxi_adc_reg_addr *regs;
 };    
 
 static struct keyadc_dev keyadc_pdata = {  
-	.regs = (struct sun7i_lradc_regs *)LRADC_BASE_ADDR,  
+	.regs = &sunxi_adc_reg,
 };  
 
 static struct platform_device keyadc_device = {  
@@ -272,20 +272,20 @@ static int keyadc_probe(struct platform_device *pdev)
 	}  
 	device_create(pdata->class, NULL, pdata->devid, NULL, DEVNAME);  
 	
-	pdata->regs->intc = (volatile void __iomem *)(LRADC_BASE_ADDR + LRADC_INTC);
-	printk("intc =%p\n", pdata->regs->intc);
-	pdata->regs->ctrl = (volatile void __iomem *)(LRADC_BASE_ADDR + LRADC_CTRL);
 	printk("ctrl =%p\n", pdata->regs->ctrl);
-	pdata->regs->ints = (volatile void __iomem *)(LRADC_BASE_ADDR + LRADC_INTS);
-	pdata->regs->data0 = (volatile void __iomem *)(LRADC_BASE_ADDR + LRADC_DATA0);
+	printk("intc =%p\n", pdata->regs->intc);
+	printk("ints =%p\n", pdata->regs->ints);
 	
+	u32 intc_reg = LRADC_ADC0_DOWN_EN|LRADC_ADC0_UP_EN|LRADC_ADC0_DATA_EN;
+	printk("intc_reg =%d\n", intc_reg);
+	writel(LRADC_ADC0_DOWN_EN|LRADC_ADC0_UP_EN|LRADC_ADC0_DATA_EN, pdata->regs->intc);
 
-//	writel(LRADC_ADC0_DOWN_EN|LRADC_ADC0_UP_EN|LRADC_ADC0_DATA_EN, pdata->regs->intc);  
-//	writel(FIRST_CONCERT_DLY|LEVELB_VOL|KEY_MODE_SELECT|LRADC_HOLD_EN|ADC_CHAN_SELECT|LRADC_SAMPLE_250HZ|LRADC_EN, pdata->regs->ctrl);  
-
-	if (request_irq(KEY_IRQNO, key_interrupt, 0, IRQNAME, pdata)) {  
-		dprintk("=====[%s(%d)]:%s\n", __FUNCTION__, __LINE__, "fail to request_irq");  
-		goto fail3;  
+	printk("%d %d %d %d %d %d %d\n", FIRST_CONCERT_DLY,LEVELB_VOL,KEY_MODE_SELECT,LRADC_HOLD_EN,ADC_CHAN_SELECT,LRADC_SAMPLE_250HZ,LRADC_EN);
+	writel(FIRST_CONCERT_DLY|LEVELB_VOL|KEY_MODE_SELECT|LRADC_HOLD_EN|LRADC_SAMPLE_250HZ|LRADC_EN, pdata->regs->ctrl);
+	
+	if (request_irq(KEY_IRQNO, key_interrupt, 0, IRQNAME, pdata)) {
+		dprintk("=====[%s(%d)]:%s\n", __FUNCTION__, __LINE__, "fail to request_irq");
+		goto fail3;
 	}  
 
 	pdata->keyadc_workqueue = create_singlethread_workqueue(WORKQUEUENAME);    
@@ -343,7 +343,6 @@ static int __init keyadc_init(void)
 {  
 	int ret;  
 
-	printk("------------------------\n");
 	dprintk("=====[%s(%d)]\n", __FUNCTION__, __LINE__);  
 
 	ret = platform_device_register(&keyadc_device);  
