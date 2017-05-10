@@ -43,3 +43,4 @@ base_addr = ioremap(KEY_ADCBASE, offset_all);
 #如何删除test目录下的垃圾文件
 
 
+#添加项目需求：如何根据ADC的采样值来设定算法，求得采样区间内所对应的不同的键值.  算法 ！
