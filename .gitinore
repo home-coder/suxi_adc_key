@@ -1,0 +1,8 @@
+test/.irq.ko.cmd
+test/.irq.mod.o.cmd
+test/.irq.o.cmd
+test/irq.ko
+test/irq.mod.c
+test/irq.mod.o
+test/irq.o
+
