@@ -11,5 +11,5 @@ PWD := $(shell pwd)
 all:
 	make $(EXTRA_CFLAGS) -C $(KDIR) M=$(PWD) modules
 clean:
-	rm -rf *.o *.ko *.mod.c *.symvers modules.order
+	rm -rf *.o *.ko *.mod.c *.symvers modules.order .key_input* .tmp_versions
 	#如何删除test目录下的垃圾文件
