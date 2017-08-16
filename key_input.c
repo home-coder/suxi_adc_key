@@ -25,6 +25,7 @@
 #define KEYADC_HOME     (0x13)  
 #define KEYADC_BACK     (0x14)  
 
+//arch/arm/mach-sunxi/include/mach/sun8i/irqs-sun8iw7p1.h 如果是h2平台中有对中断向量定义
 #define KEY_IRQNO       (62) 
 
 #define INPUTNAME       "keyadc_input"
@@ -226,6 +227,7 @@ static irqreturn_t key_interrupt(int irq, void *pvoid)
 
 	queue_work(pdata->keyadc_workqueue, &pdata->keyadc_work);  
 
+	//严格来讲，需要清楚中断状态位 clr_ints
 	writel(reg_val, pdata->regs->ints);  
 
 	return IRQ_HANDLED;  
