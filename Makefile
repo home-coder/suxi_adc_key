@@ -4,7 +4,8 @@ export CROSS_COMPILE=/home/jiangxiujie/a3333/lichee/out/sun8iw5p1/android/common
 EXTRA_CFLAGS += $(DEBFLAGS) -Wall
 
 obj-m += key_input.o
-obj-m += test/irq.o
+#obj-m += adc_key.o
+#obj-m += test/irq.o
 
 KDIR ?= ~/a3333/lichee/linux-3.4
 PWD := $(shell pwd)

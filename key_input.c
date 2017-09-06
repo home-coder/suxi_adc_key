@@ -107,7 +107,9 @@ static struct keyadc_dev{
 
 	unsigned int keycode;  
 	struct sunxi_adc_reg_addr *regs;
-};    
+};
+
+struct timer_list keyadc_event_timer;
 
 static struct keyadc_dev keyadc_pdata = {  
 	.regs = &sunxi_adc_reg,
@@ -120,6 +122,9 @@ static struct platform_device keyadc_device = {
 		.platform_data = &keyadc_pdata,  
 	}         
 };  
+
+
+struct keyadc_dev *gpdata;     
 
 /****************************************************************/  
 static int keyadc_open(struct inode *inode, struct file *filp)  
@@ -155,7 +160,10 @@ static long keyadc_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned 
 
 	if (KEYADC_SET == cmd) {  
 		uarg = (void __user *)arg;  
-		copy_from_user(&karg, uarg, sizeof(unsigned long));  
+		ret = copy_from_user(&karg, uarg, sizeof(unsigned long));  
+		if(0 == ret){  
+			dprintk("copy_from_user successed!\n");  
+		}  
 
 		switch (karg) {  
 			case KEYADC_VOLUP:  
@@ -177,7 +185,7 @@ static long keyadc_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned 
 	}  
 	if (KEYADC_GET == cmd){  
 		karg = pdata->keycode;  
-		dprintk("send keycode to usr space: pdata->keycode=0x%x, karg=0x%x\n", pdata->keycode, karg);  
+		dprintk("send keycode to usr space: pdata->keycode=0x%x, karg=0x%x\n", (unsigned int)pdata->keycode, (unsigned int)karg);  
 		ret = copy_to_user((void __user *)arg, &karg, sizeof(unsigned long));  
 		if(0 == ret){  
 			dprintk("copy_to_user successed!\n");  
@@ -197,11 +205,12 @@ static struct file_operations keyadc_fops = {
 static void keyadc_do_work(struct work_struct *work)  
 {  
 	struct keyadc_dev *pdata;  
+	u32 dval;
 	dprintk("=====[%s(%d)]\n", __FUNCTION__, __LINE__);
 	pdata = (struct keyadc_dev *)container_of(work, struct keyadc_dev, keyadc_work);
 
 	//data[5:0]
-	u32	dval = *(volatile unsigned __iomem *)(pdata->regs->data0) & 0x3f;
+	dval = *(volatile unsigned __iomem *)(pdata->regs->data0) & 0x3f;
 	printk("%d\n", dval);
 	if (dval < 9) {
 		pdata->keycode = KEY_VOLUMEUP;
@@ -211,24 +220,60 @@ static void keyadc_do_work(struct work_struct *work)
 		printk("------------------down-----------------\n");
 	}
 
+	//1. 按下 2.取消； TODO 查看是否是两个都必要
 	input_report_key(pdata->input, pdata->keycode, 1);
 	input_report_key(pdata->input, pdata->keycode, 0);
 	input_sync(pdata->input);
 }  
 
+static void keyadc_event_function(unsigned long data)
+{
+	dprintk("=====[%s(%d)]\n", __FUNCTION__, __LINE__);
+	if (!gpdata) {
+		printk("pdata is null exit -1");
+		return ;
+	}
+	
+	if (!work_pending(&gpdata->keyadc_work)) {
+		queue_work(gpdata->keyadc_workqueue, &gpdata->keyadc_work);
+	}
+
+	mod_timer(&keyadc_event_timer, jiffies + 1* HZ);
+}
+
+static void keyadc_init_timer(void)
+{
+	dprintk("=====[%s(%d)]\n", __FUNCTION__, __LINE__);
+	if (!gpdata) {
+		printk("pdata is null exit -1");
+		return ;
+	}
+
+	init_timer(&keyadc_event_timer);
+	keyadc_event_timer.data = (unsigned long)gpdata;
+	keyadc_event_timer.function = keyadc_event_function;
+	add_timer(&keyadc_event_timer);
+}
+
 static irqreturn_t key_interrupt(int irq, void *pvoid)  
 {  
-
 	unsigned int reg_val;  
+	int ret = 0;
 	struct keyadc_dev *pdata    = (struct keyadc_dev *)pvoid;  
 	dprintk("=====[%s(%d)]\n", __FUNCTION__, __LINE__);  
 
 	reg_val  = readl(pdata->regs->ints);  
-
-	queue_work(pdata->keyadc_workqueue, &pdata->keyadc_work);  
+	printk ("===== 'reg_val=%d' ===\n", reg_val);
+	//判断中断状态是否是到来
+	// if () {
+	ret = mod_timer(&keyadc_event_timer, jiffies + (HZ) / 2); //500ms
+	if (ret < 0) {
+		printk("mod_timer");
+	}
+	//}
 
 	//严格来讲，需要清楚中断状态位 clr_ints
-	writel(reg_val, pdata->regs->ints);  
+	//writel(reg_val, pdata->regs->ints);  
 
 	return IRQ_HANDLED;  
 }  
@@ -237,9 +282,11 @@ static int keyadc_probe(struct platform_device *pdev)
 {  
 	int ret;  
 	struct cdev *pchrdev;  
-	dprintk("=====[%s(%d)]\n", __FUNCTION__, __LINE__);  
-
+	u32 intc_reg;
 	struct keyadc_dev *pdata = pdev->dev.platform_data;  
+
+	dprintk("=====[%s(%d)]\n", __FUNCTION__, __LINE__);  
+	gpdata = pdata;
 
 	alloc_chrdev_region(&pdata->devid, 0, 1, DEVNAME);  
 	pchrdev = cdev_alloc();  
@@ -280,13 +327,14 @@ static int keyadc_probe(struct platform_device *pdev)
 	printk("intc =%p\n", pdata->regs->intc);
 	printk("ints =%p\n", pdata->regs->ints);
 	
-	u32 intc_reg = LRADC_ADC0_DOWN_EN|LRADC_ADC0_UP_EN|LRADC_ADC0_DATA_EN;
+	intc_reg = LRADC_ADC0_DOWN_EN|LRADC_ADC0_UP_EN|LRADC_ADC0_DATA_EN;
 	printk("intc_reg =%d\n", intc_reg);
 	writel(LRADC_ADC0_DOWN_EN|LRADC_ADC0_UP_EN|LRADC_ADC0_DATA_EN, pdata->regs->intc);
 
 	printk("%d %d %d %d %d %d %d\n", FIRST_CONCERT_DLY,LEVELB_VOL,KEY_MODE_SELECT,LRADC_HOLD_EN,ADC_CHAN_SELECT,LRADC_SAMPLE_250HZ,LRADC_EN);
 	writel(FIRST_CONCERT_DLY|LEVELB_VOL|KEY_MODE_SELECT|LRADC_HOLD_EN|LRADC_SAMPLE_250HZ|LRADC_EN, pdata->regs->ctrl);
-	
+
+
 	if (request_irq(KEY_IRQNO, key_interrupt, 0, IRQNAME, pdata)) {
 		dprintk("=====[%s(%d)]:%s\n", __FUNCTION__, __LINE__, "fail to request_irq");
 		goto fail3;
@@ -298,6 +346,9 @@ static int keyadc_probe(struct platform_device *pdev)
 		goto fail4;  
 	}     
 	INIT_WORK(&pdata->keyadc_work, keyadc_do_work);  
+
+	//创建消抖定时器
+	keyadc_init_timer();
 
 	return 0;  
 
